@@ -3,6 +3,11 @@ use bevy_rapier2d::prelude::*;
 
 pub struct PendulumPlugin;
 
+// Collision groups
+const GROUND: Group = Group::GROUP_1;
+const WHEEL: Group = Group::GROUP_2;
+const CARRIAGE: Group = Group::GROUP_3;
+
 impl Plugin for PendulumPlugin {
     fn build(&self, app: &mut App) {
         app
@@ -14,10 +19,13 @@ impl Plugin for PendulumPlugin {
 
 fn setup_ground(mut commands: Commands) {
     /* Create the ground. */
+    let collision_group_filter = GROUND | WHEEL | CARRIAGE;
     commands
-        .spawn(Collider::cuboid(500.0, 50.0))
-        .insert(TransformBundle::from(Transform::from_xyz(0.0, -100.0, 0.0)))
-        .insert(Friction::coefficient(1.0));
+        .spawn((Collider::cuboid(500.0, 50.0),
+                TransformBundle::from(Transform::from_xyz(0.0, -100.0, 0.0)),
+                Friction::coefficient(1.0),
+                CollisionGroups::new(GROUND, collision_group_filter),
+        ));
 }
 
 #[derive(Component)]
@@ -33,12 +41,12 @@ fn add_carriage(carriage_config: CarriageConfig, commands: &mut Commands,
                 meshes: &mut ResMut<Assets<Mesh>>,
                 materials: &mut ResMut<Assets<ColorMaterial>>,
 ) -> Entity {
+    let collision_group_filter = GROUND | CARRIAGE;
     return commands
         .spawn((
             RigidBody::Dynamic,
-            // Collider::cuboid(carriage_config.length, carriage_config.height),
-            // Restitution::coefficient(carriage_config.restitution),
-            // Friction::coefficient(carriage_config.friction),
+            // Note factors of 2.0: Rapier uses half-length and height as the parameters.
+            Collider::cuboid(carriage_config.length / 2.0, carriage_config.height / 2.0),
             ExternalForce {
                 force: Vec2::new(0.0, 0.0),
                 torque: 0.0,
@@ -49,7 +57,7 @@ fn add_carriage(carriage_config: CarriageConfig, commands: &mut Commands,
                 transform: carriage_config.initial_position,
                 ..default()
             },
-            Wheel
+            CollisionGroups::new(CARRIAGE, collision_group_filter),
         )).id();
 }
 
@@ -67,6 +75,7 @@ fn add_wheel(wheel_config: WheelConfig, carriage: &mut Entity, commands: &mut Co
              meshes: &mut ResMut<Assets<Mesh>>,
              materials: &mut ResMut<Assets<ColorMaterial>>,
 ) {
+    let collision_group_filter = GROUND;
     let wheel = commands
         .spawn((
             RigidBody::Dynamic, Collider::ball(wheel_config.radius),
@@ -82,6 +91,7 @@ fn add_wheel(wheel_config: WheelConfig, carriage: &mut Entity, commands: &mut Co
                 transform: wheel_config.initial_position,
                 ..default()
             },
+            CollisionGroups::new(WHEEL, collision_group_filter.into()),
             Wheel
         )).id();
     let axis = RevoluteJointBuilder::new().local_anchor1(Vec2::new(wheel_config.initial_position.translation.x, 0.0));
@@ -122,7 +132,7 @@ fn setup_pendulum(mut commands: Commands,
 
 
 fn get_torque(keyboard_input: Res<Input<KeyCode>>) -> f32 {
-    const TORQUE: f32 = 10.0;
+    const TORQUE: f32 = 1.0;
     let mut torque: f32 = 0.0;
     if keyboard_input.pressed(KeyCode::Left) {
         torque = TORQUE;

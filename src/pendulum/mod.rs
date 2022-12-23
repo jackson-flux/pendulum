@@ -23,42 +23,60 @@ fn setup_ground(mut commands: Commands) {
 #[derive(Component)]
 struct Wheel;
 
-fn setup_pendulum(mut commands: Commands,
-                  mut meshes: ResMut<Assets<Mesh>>,
-                  mut materials: ResMut<Assets<ColorMaterial>>,
-) {
-    add_wheel(100.0, &mut commands, &mut meshes, &mut materials);
-    add_wheel(-100.0, &mut commands, &mut meshes, &mut materials);
+struct WheelConfig {
+    radius: Real,
+    initial_position: Transform,
+    restitution: Real,
+    friction: Real,
 }
 
-fn add_wheel(offset: f32, commands: &mut Commands,
+fn add_wheel(wheel_config: WheelConfig, commands: &mut Commands,
              meshes: &mut ResMut<Assets<Mesh>>,
              materials: &mut ResMut<Assets<ColorMaterial>>,
 ) {
-    const WHEEL_RADIUS: Real = 50.0;
-    const RESTITUTION: Real = 0.7;
-    const FRICTION: Real = 1.0;
-    const INITIAL_HEIGHT: Real = 50.0;
-    let transform = Transform::from_xyz(offset, INITIAL_HEIGHT, 0.0);
     commands
         .spawn((
-            RigidBody::Dynamic, Collider::ball(WHEEL_RADIUS),
-            Restitution::coefficient(RESTITUTION),
-            Friction::coefficient(FRICTION),
+            RigidBody::Dynamic, Collider::ball(wheel_config.radius),
+            Restitution::coefficient(wheel_config.restitution),
+            Friction::coefficient(wheel_config.friction),
             // TransformBundle::from(transform),
             ExternalForce {
                 force: Vec2::new(0.0, 0.0),
                 torque: 0.0,
             },
             MaterialMesh2dBundle {
-                mesh: meshes.add(shape::Circle::new(WHEEL_RADIUS).into()).into(),
+                mesh: meshes.add(shape::Circle::new(wheel_config.radius).into()).into(),
                 material: materials.add(ColorMaterial::from(Color::PURPLE)),
-                transform,
+                transform: wheel_config.initial_position,
                 ..default()
             },
             Wheel
         ));
 }
+
+fn setup_pendulum(mut commands: Commands,
+                  mut meshes: ResMut<Assets<Mesh>>,
+                  mut materials: ResMut<Assets<ColorMaterial>>,
+) {
+    const WHEEL_BASE: f32 = 100.0;
+    const WHEEL_RADIUS: f32 = 10.0;
+    const CARRIAGE_LENGTH: f32 = WHEEL_BASE + 10.0;
+    const Y_ZERO: f32 = 50.0;
+
+    let left_wheel_config = WheelConfig {
+        radius: WHEEL_RADIUS,
+        initial_position: Transform::from_xyz(-WHEEL_BASE / 2.0, Y_ZERO, 0 as f32),
+        restitution: 1.0,
+        friction: 1.0,
+    };
+    let right_wheel_config = WheelConfig {
+        initial_position: Transform::from_xyz(WHEEL_BASE / 2.0, Y_ZERO, 0 as f32),
+        ..left_wheel_config
+    };
+    add_wheel(left_wheel_config, &mut commands, &mut meshes, &mut materials);
+    add_wheel(right_wheel_config, &mut commands, &mut meshes, &mut materials);
+}
+
 
 fn get_torque(keyboard_input: Res<Input<KeyCode>>) -> f32 {
     const TORQUE: f32 = 10.0;

@@ -1,4 +1,5 @@
 use bevy::{prelude::*, sprite::MaterialMesh2dBundle};
+use bevy::ecs::system::EntityCommands;
 use bevy_rapier2d::prelude::*;
 
 pub struct PendulumPlugin;
@@ -18,6 +19,39 @@ fn setup_ground(mut commands: Commands) {
         .spawn(Collider::cuboid(500.0, 50.0))
         .insert(TransformBundle::from(Transform::from_xyz(0.0, -100.0, 0.0)))
         .insert(Friction::coefficient(1.0));
+}
+
+#[derive(Component)]
+struct Carriage;
+
+struct CarriageConfig {
+    length: Real,
+    height: Real,
+    initial_position: Transform,
+}
+
+fn add_carriage(carriage_config: CarriageConfig, commands: &mut Commands,
+                meshes: &mut ResMut<Assets<Mesh>>,
+                materials: &mut ResMut<Assets<ColorMaterial>>,
+) {
+    commands
+        .spawn((
+            RigidBody::Dynamic,
+            // Collider::cuboid(carriage_config.length, carriage_config.height),
+            // Restitution::coefficient(carriage_config.restitution),
+            // Friction::coefficient(carriage_config.friction),
+            ExternalForce {
+                force: Vec2::new(0.0, 0.0),
+                torque: 0.0,
+            },
+            MaterialMesh2dBundle {
+                mesh: meshes.add(shape::Box::new(carriage_config.length, carriage_config.height, 0.0).into()).into(),
+                material: materials.add(ColorMaterial::from(Color::PURPLE)),
+                transform: carriage_config.initial_position,
+                ..default()
+            },
+            Wheel
+        ));
 }
 
 #[derive(Component)]
@@ -61,20 +95,28 @@ fn setup_pendulum(mut commands: Commands,
     const WHEEL_BASE: f32 = 100.0;
     const WHEEL_RADIUS: f32 = 10.0;
     const CARRIAGE_LENGTH: f32 = WHEEL_BASE + 10.0;
+    const CARRIAGE_HEIGHT: f32 = 10.0;
     const Y_ZERO: f32 = 50.0;
 
     let left_wheel_config = WheelConfig {
         radius: WHEEL_RADIUS,
-        initial_position: Transform::from_xyz(-WHEEL_BASE / 2.0, Y_ZERO, 0 as f32),
+        initial_position: Transform::from_xyz(-WHEEL_BASE / 2.0, Y_ZERO, 0.0),
         restitution: 1.0,
         friction: 1.0,
     };
     let right_wheel_config = WheelConfig {
-        initial_position: Transform::from_xyz(WHEEL_BASE / 2.0, Y_ZERO, 0 as f32),
+        initial_position: Transform::from_xyz(WHEEL_BASE / 2.0, Y_ZERO, 0.0),
         ..left_wheel_config
     };
     add_wheel(left_wheel_config, &mut commands, &mut meshes, &mut materials);
     add_wheel(right_wheel_config, &mut commands, &mut meshes, &mut materials);
+
+    let carriage_config = CarriageConfig {
+        length: CARRIAGE_LENGTH,
+        height: CARRIAGE_HEIGHT,
+        initial_position: Transform::from_xyz(0.0, Y_ZERO, 0.0),
+    };
+    add_carriage(carriage_config, &mut commands, &mut meshes, &mut materials);
 }
 
 

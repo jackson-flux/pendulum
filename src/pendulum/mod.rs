@@ -1,12 +1,20 @@
 use bevy::{prelude::*, sprite::MaterialMesh2dBundle};
 use bevy_rapier2d::prelude::*;
 
-#[derive(Component)]
-pub struct Wheel;
+pub struct PendulumPlugin;
 
-pub fn setup_physics(mut commands: Commands,
-                     mut meshes: ResMut<Assets<Mesh>>,
-                     mut materials: ResMut<Assets<ColorMaterial>>,
+impl Plugin for PendulumPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_startup_system(setup_physics).add_system(control_wheel);
+    }
+}
+
+#[derive(Component)]
+struct Wheel;
+
+fn setup_physics(mut commands: Commands,
+                 mut meshes: ResMut<Assets<Mesh>>,
+                 mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
     /* Create the ground. */
     commands
@@ -59,7 +67,7 @@ fn get_torque(keyboard_input: Res<Input<KeyCode>>) -> f32 {
     return torque;
 }
 
-pub fn control_wheel(
+fn control_wheel(
     keyboard_input: Res<Input<KeyCode>>,
     mut forces: Query<&mut ExternalForce, With<Wheel>>,
 ) {

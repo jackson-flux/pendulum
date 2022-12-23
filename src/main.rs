@@ -8,9 +8,8 @@ fn main() {
         .add_plugins(DefaultPlugins)
         .add_plugin(RapierPhysicsPlugin::<NoUserData>::pixels_per_meter(100.0))
         .add_plugin(RapierDebugRenderPlugin::default())
+        .add_plugin(pendulum::PendulumPlugin)
         .add_startup_system(setup_graphics)
-        .add_startup_system(pendulum::setup_physics)
-        .add_system(pendulum::control_wheel)
         .run();
 }
 

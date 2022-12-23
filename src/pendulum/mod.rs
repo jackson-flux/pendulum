@@ -180,12 +180,12 @@ fn setup_pendulum(
 
     let left_wheel_config = WheelConfig {
         radius: WHEEL_RADIUS,
-        initial_position: Transform::from_xyz(-WHEEL_BASE / 2.0, Y_ZERO, 0.0),
+        initial_position: Transform::from_xyz(-WHEEL_BASE / 2.0, Y_ZERO, 1.0),
         restitution: 1.0,
         friction: 1.0,
     };
     let right_wheel_config = WheelConfig {
-        initial_position: Transform::from_xyz(WHEEL_BASE / 2.0, Y_ZERO, 0.0),
+        initial_position: Transform::from_xyz(WHEEL_BASE / 2.0, Y_ZERO, 1.0),
         ..left_wheel_config
     };
 

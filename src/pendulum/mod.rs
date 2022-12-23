@@ -30,36 +30,82 @@ fn setup_ground(mut commands: Commands) {
 #[derive(Component)]
 struct Carriage;
 
-struct CarriageConfig {
+struct BlockConfig {
     length: Real,
     height: Real,
     initial_position: Transform,
 }
 
 fn add_carriage(
-    carriage_config: CarriageConfig,
+    carriage_config: BlockConfig,
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
     materials: &mut ResMut<Assets<ColorMaterial>>,
 ) -> Entity {
-    let collision_group_filter = GROUND | CARRIAGE;
+    return add_block(carriage_config, commands, meshes, materials);
+}
+
+#[derive(Component)]
+struct Pendulum;
+
+fn add_pendulum(
+    pendulum_config: BlockConfig,
+    carriage: &mut Entity,
+    commands: &mut Commands,
+    meshes: &mut ResMut<Assets<Mesh>>,
+    materials: &mut ResMut<Assets<ColorMaterial>>,
+) {
+    // Add the little bit to join the pendulum and the carriage.
+    let joiner_height = pendulum_config.length * 3.0;
+    let pendulum_height = pendulum_config.height;
+    let joiner_config = BlockConfig {
+        height: joiner_height,
+        length: pendulum_config.length,
+        initial_position: Transform::from_xyz(
+            0.0,
+            pendulum_config.length + pendulum_config.initial_position.translation.y,
+            0.0,
+        ),
+    };
+    let joiner = add_block(joiner_config, commands, meshes, materials);
+
+    let pendulum = add_block(pendulum_config, commands, meshes, materials);
+
+    let joiner_pin = FixedJointBuilder::new().local_anchor1(Vec2::new(0.0, -joiner_height / 2.0));
+    commands.entity(*carriage).with_children(|cmd| {
+        cmd.spawn(ImpulseJoint::new(joiner, joiner_pin));
+    });
+
+    let pendulum_pivot = RevoluteJointBuilder::new()
+        .local_anchor1(Vec2::new(0.0, joiner_height / 2.0))
+        .local_anchor2(Vec2::new(0.0, -pendulum_height / 2.0));
+    commands.entity(pendulum).with_children(|cmd| {
+        cmd.spawn(ImpulseJoint::new(joiner, pendulum_pivot));
+    });
+}
+
+fn add_block(
+    block_config: BlockConfig,
+    commands: &mut Commands,
+    meshes: &mut ResMut<Assets<Mesh>>,
+    materials: &mut ResMut<Assets<ColorMaterial>>,
+) -> Entity {
+    let collision_group_filter = GROUND;
     return commands
         .spawn((
             RigidBody::Dynamic,
             // Note factors of 2.0: Rapier uses half-length and height as the parameters.
-            Collider::cuboid(carriage_config.length / 2.0, carriage_config.height / 2.0),
+            Collider::cuboid(block_config.length / 2.0, block_config.height / 2.0),
             ExternalForce {
                 force: Vec2::new(0.0, 0.0),
                 torque: 0.0,
             },
             MaterialMesh2dBundle {
                 mesh: meshes
-                    .add(
-                        shape::Box::new(carriage_config.length, carriage_config.height, 0.0).into(),
-                    )
+                    .add(shape::Box::new(block_config.length, block_config.height, 0.0).into())
                     .into(),
                 material: materials.add(ColorMaterial::from(Color::PURPLE)),
-                transform: carriage_config.initial_position,
+                transform: block_config.initial_position,
                 ..default()
             },
             CollisionGroups::new(CARRIAGE, collision_group_filter),
@@ -128,6 +174,8 @@ fn setup_pendulum(
     const WHEEL_RADIUS: f32 = 10.0;
     const CARRIAGE_LENGTH: f32 = WHEEL_BASE + 10.0;
     const CARRIAGE_HEIGHT: f32 = 10.0;
+    const PENDULUM_LENGTH: f32 = CARRIAGE_HEIGHT;
+    const PENDULUM_HEIGHT: f32 = CARRIAGE_LENGTH;
     const Y_ZERO: f32 = 50.0;
 
     let left_wheel_config = WheelConfig {
@@ -141,12 +189,26 @@ fn setup_pendulum(
         ..left_wheel_config
     };
 
-    let carriage_config = CarriageConfig {
+    let carriage_config = BlockConfig {
         length: CARRIAGE_LENGTH,
         height: CARRIAGE_HEIGHT,
         initial_position: Transform::from_xyz(0.0, Y_ZERO, 0.0),
     };
+
+    const PENDULUM_OFFSET: f32 = Y_ZERO + (PENDULUM_HEIGHT / 2.0) + (PENDULUM_LENGTH * 3.0);
+    let pendulum_config = BlockConfig {
+        length: PENDULUM_LENGTH,
+        height: PENDULUM_HEIGHT,
+        initial_position: Transform::from_xyz(0.0, PENDULUM_OFFSET, 0.0),
+    };
     let mut carriage = add_carriage(carriage_config, &mut commands, &mut meshes, &mut materials);
+    add_pendulum(
+        pendulum_config,
+        &mut carriage,
+        &mut commands,
+        &mut meshes,
+        &mut materials,
+    );
     add_wheel(
         left_wheel_config,
         &mut carriage,

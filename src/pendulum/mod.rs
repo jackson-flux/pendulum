@@ -10,8 +10,7 @@ const CARRIAGE: Group = Group::GROUP_3;
 
 impl Plugin for PendulumPlugin {
     fn build(&self, app: &mut App) {
-        app
-            .add_startup_system(setup_ground)
+        app.add_startup_system(setup_ground)
             .add_startup_system(setup_pendulum)
             .add_system(control_wheel);
     }
@@ -20,12 +19,12 @@ impl Plugin for PendulumPlugin {
 fn setup_ground(mut commands: Commands) {
     /* Create the ground. */
     let collision_group_filter = GROUND | WHEEL | CARRIAGE;
-    commands
-        .spawn((Collider::cuboid(500.0, 50.0),
-                TransformBundle::from(Transform::from_xyz(0.0, -100.0, 0.0)),
-                Friction::coefficient(1.0),
-                CollisionGroups::new(GROUND, collision_group_filter),
-        ));
+    commands.spawn((
+        Collider::cuboid(500.0, 50.0),
+        TransformBundle::from(Transform::from_xyz(0.0, -100.0, 0.0)),
+        Friction::coefficient(100.0),
+        CollisionGroups::new(GROUND, collision_group_filter),
+    ));
 }
 
 #[derive(Component)]
@@ -37,9 +36,11 @@ struct CarriageConfig {
     initial_position: Transform,
 }
 
-fn add_carriage(carriage_config: CarriageConfig, commands: &mut Commands,
-                meshes: &mut ResMut<Assets<Mesh>>,
-                materials: &mut ResMut<Assets<ColorMaterial>>,
+fn add_carriage(
+    carriage_config: CarriageConfig,
+    commands: &mut Commands,
+    meshes: &mut ResMut<Assets<Mesh>>,
+    materials: &mut ResMut<Assets<ColorMaterial>>,
 ) -> Entity {
     let collision_group_filter = GROUND | CARRIAGE;
     return commands
@@ -52,13 +53,18 @@ fn add_carriage(carriage_config: CarriageConfig, commands: &mut Commands,
                 torque: 0.0,
             },
             MaterialMesh2dBundle {
-                mesh: meshes.add(shape::Box::new(carriage_config.length, carriage_config.height, 0.0).into()).into(),
+                mesh: meshes
+                    .add(
+                        shape::Box::new(carriage_config.length, carriage_config.height, 0.0).into(),
+                    )
+                    .into(),
                 material: materials.add(ColorMaterial::from(Color::PURPLE)),
                 transform: carriage_config.initial_position,
                 ..default()
             },
             CollisionGroups::new(CARRIAGE, collision_group_filter),
-        )).id();
+        ))
+        .id();
 }
 
 #[derive(Component)]
@@ -71,37 +77,52 @@ struct WheelConfig {
     friction: Real,
 }
 
-fn add_wheel(wheel_config: WheelConfig, carriage: &mut Entity, commands: &mut Commands,
-             meshes: &mut ResMut<Assets<Mesh>>,
-             materials: &mut ResMut<Assets<ColorMaterial>>,
+fn add_wheel(
+    wheel_config: WheelConfig,
+    carriage: &mut Entity,
+    commands: &mut Commands,
+    meshes: &mut ResMut<Assets<Mesh>>,
+    materials: &mut ResMut<Assets<ColorMaterial>>,
 ) {
     let collision_group_filter = GROUND;
     let wheel = commands
         .spawn((
-            RigidBody::Dynamic, Collider::ball(wheel_config.radius),
+            RigidBody::Dynamic,
+            Collider::ball(wheel_config.radius),
             Restitution::coefficient(wheel_config.restitution),
             Friction::coefficient(wheel_config.friction),
             ExternalForce {
                 force: Vec2::new(0.0, 0.0),
                 torque: 0.0,
             },
+            Velocity {
+                linvel: Default::default(),
+                angvel: 0.0,
+            },
             MaterialMesh2dBundle {
-                mesh: meshes.add(shape::Circle::new(wheel_config.radius).into()).into(),
+                mesh: meshes
+                    .add(shape::Circle::new(wheel_config.radius).into())
+                    .into(),
                 material: materials.add(ColorMaterial::from(Color::BLUE)),
                 transform: wheel_config.initial_position,
                 ..default()
             },
             CollisionGroups::new(WHEEL, collision_group_filter.into()),
-            Wheel
-        )).id();
-    let axis = RevoluteJointBuilder::new().local_anchor1(Vec2::new(wheel_config.initial_position.translation.x, 0.0));
+            Wheel,
+        ))
+        .id();
+    let axis = RevoluteJointBuilder::new()
+        .local_anchor1(Vec2::new(wheel_config.initial_position.translation.x, 0.0));
 
-    commands.entity(wheel).with_children(|cmd| { cmd.spawn(ImpulseJoint::new(*carriage, axis)); });
+    commands.entity(wheel).with_children(|cmd| {
+        cmd.spawn(ImpulseJoint::new(*carriage, axis));
+    });
 }
 
-fn setup_pendulum(mut commands: Commands,
-                  mut meshes: ResMut<Assets<Mesh>>,
-                  mut materials: ResMut<Assets<ColorMaterial>>,
+fn setup_pendulum(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
     const WHEEL_BASE: f32 = 100.0;
     const WHEEL_RADIUS: f32 = 10.0;
@@ -126,29 +147,56 @@ fn setup_pendulum(mut commands: Commands,
         initial_position: Transform::from_xyz(0.0, Y_ZERO, 0.0),
     };
     let mut carriage = add_carriage(carriage_config, &mut commands, &mut meshes, &mut materials);
-    add_wheel(left_wheel_config, &mut carriage, &mut commands, &mut meshes, &mut materials);
-    add_wheel(right_wheel_config, &mut carriage, &mut commands, &mut meshes, &mut materials);
+    add_wheel(
+        left_wheel_config,
+        &mut carriage,
+        &mut commands,
+        &mut meshes,
+        &mut materials,
+    );
+    add_wheel(
+        right_wheel_config,
+        &mut carriage,
+        &mut commands,
+        &mut meshes,
+        &mut materials,
+    );
 }
 
+fn get_torque(angular_velocity: f32, keyboard_input: &Res<Input<KeyCode>>) -> f32 {
+    const MAX_TORQUE: f32 = 0.1;
+    const MAX_ANGULAR_VELOCITY: f32 = 10.0;
 
-fn get_torque(keyboard_input: Res<Input<KeyCode>>) -> f32 {
-    const TORQUE: f32 = 1.0;
+    // Between -1.0 and 1.0.
+    const TRUNC_MIN: f32 = -1.0;
+    const TRUNC_MAX: f32 = 1.0;
+    let velocity_proportion = (angular_velocity / MAX_ANGULAR_VELOCITY)
+        .max(TRUNC_MIN)
+        .min(TRUNC_MAX);
+    let positive_residual_velocity = 1.0 - velocity_proportion.max(0.0);
+    let negative_residual_velocity = 1.0 + velocity_proportion.min(0.0);
+
     let mut torque: f32 = 0.0;
     if keyboard_input.pressed(KeyCode::Left) {
-        torque = TORQUE;
+        // On left keypress, we want the torque to be positive, so wheel spins anticlockwise.
+        torque = positive_residual_velocity * MAX_TORQUE;
     }
     if keyboard_input.pressed(KeyCode::Right) {
-        torque = -TORQUE;
+        torque = -negative_residual_velocity * MAX_TORQUE;
+    }
+    if keyboard_input.pressed(KeyCode::Down) {
+        torque = -velocity_proportion * MAX_TORQUE;
     }
     return torque;
 }
 
 fn control_wheel(
     keyboard_input: Res<Input<KeyCode>>,
+    velocities: Query<&Velocity, With<Wheel>>,
     mut forces: Query<&mut ExternalForce, With<Wheel>>,
 ) {
-    let torque = get_torque(keyboard_input);
-    for mut force in forces.iter_mut() {
+    for (velocity, mut force) in velocities.iter().zip(forces.iter_mut()) {
+        let torque = get_torque(velocity.angvel, &keyboard_input);
         force.torque = torque;
     }
 }

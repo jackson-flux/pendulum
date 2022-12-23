@@ -1,5 +1,4 @@
 use bevy::{prelude::*, sprite::MaterialMesh2dBundle};
-use bevy::ecs::system::EntityCommands;
 use bevy_rapier2d::prelude::*;
 
 pub struct PendulumPlugin;
@@ -33,8 +32,8 @@ struct CarriageConfig {
 fn add_carriage(carriage_config: CarriageConfig, commands: &mut Commands,
                 meshes: &mut ResMut<Assets<Mesh>>,
                 materials: &mut ResMut<Assets<ColorMaterial>>,
-) {
-    commands
+) -> Entity {
+    return commands
         .spawn((
             RigidBody::Dynamic,
             // Collider::cuboid(carriage_config.length, carriage_config.height),
@@ -51,7 +50,7 @@ fn add_carriage(carriage_config: CarriageConfig, commands: &mut Commands,
                 ..default()
             },
             Wheel
-        ));
+        )).id();
 }
 
 #[derive(Component)]
@@ -64,28 +63,30 @@ struct WheelConfig {
     friction: Real,
 }
 
-fn add_wheel(wheel_config: WheelConfig, commands: &mut Commands,
+fn add_wheel(wheel_config: WheelConfig, carriage: &mut Entity, commands: &mut Commands,
              meshes: &mut ResMut<Assets<Mesh>>,
              materials: &mut ResMut<Assets<ColorMaterial>>,
 ) {
-    commands
+    let wheel = commands
         .spawn((
             RigidBody::Dynamic, Collider::ball(wheel_config.radius),
             Restitution::coefficient(wheel_config.restitution),
             Friction::coefficient(wheel_config.friction),
-            // TransformBundle::from(transform),
             ExternalForce {
                 force: Vec2::new(0.0, 0.0),
                 torque: 0.0,
             },
             MaterialMesh2dBundle {
                 mesh: meshes.add(shape::Circle::new(wheel_config.radius).into()).into(),
-                material: materials.add(ColorMaterial::from(Color::PURPLE)),
+                material: materials.add(ColorMaterial::from(Color::BLUE)),
                 transform: wheel_config.initial_position,
                 ..default()
             },
             Wheel
-        ));
+        )).id();
+    let axis = RevoluteJointBuilder::new().local_anchor1(Vec2::new(wheel_config.initial_position.translation.x, 0.0));
+
+    commands.entity(wheel).with_children(|cmd| { cmd.spawn(ImpulseJoint::new(*carriage, axis)); });
 }
 
 fn setup_pendulum(mut commands: Commands,
@@ -108,15 +109,15 @@ fn setup_pendulum(mut commands: Commands,
         initial_position: Transform::from_xyz(WHEEL_BASE / 2.0, Y_ZERO, 0.0),
         ..left_wheel_config
     };
-    add_wheel(left_wheel_config, &mut commands, &mut meshes, &mut materials);
-    add_wheel(right_wheel_config, &mut commands, &mut meshes, &mut materials);
 
     let carriage_config = CarriageConfig {
         length: CARRIAGE_LENGTH,
         height: CARRIAGE_HEIGHT,
         initial_position: Transform::from_xyz(0.0, Y_ZERO, 0.0),
     };
-    add_carriage(carriage_config, &mut commands, &mut meshes, &mut materials);
+    let mut carriage = add_carriage(carriage_config, &mut commands, &mut meshes, &mut materials);
+    add_wheel(left_wheel_config, &mut carriage, &mut commands, &mut meshes, &mut materials);
+    add_wheel(right_wheel_config, &mut carriage, &mut commands, &mut meshes, &mut materials);
 }
 
 

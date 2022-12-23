@@ -5,23 +5,28 @@ pub struct PendulumPlugin;
 
 impl Plugin for PendulumPlugin {
     fn build(&self, app: &mut App) {
-        app.add_startup_system(setup_physics).add_system(control_wheel);
+        app
+            .add_startup_system(setup_ground)
+            .add_startup_system(setup_pendulum)
+            .add_system(control_wheel);
     }
 }
 
-#[derive(Component)]
-struct Wheel;
-
-fn setup_physics(mut commands: Commands,
-                 mut meshes: ResMut<Assets<Mesh>>,
-                 mut materials: ResMut<Assets<ColorMaterial>>,
-) {
+fn setup_ground(mut commands: Commands) {
     /* Create the ground. */
     commands
         .spawn(Collider::cuboid(500.0, 50.0))
         .insert(TransformBundle::from(Transform::from_xyz(0.0, -100.0, 0.0)))
         .insert(Friction::coefficient(1.0));
+}
 
+#[derive(Component)]
+struct Wheel;
+
+fn setup_pendulum(mut commands: Commands,
+                  mut meshes: ResMut<Assets<Mesh>>,
+                  mut materials: ResMut<Assets<ColorMaterial>>,
+) {
     add_wheel(100.0, &mut commands, &mut meshes, &mut materials);
     add_wheel(-100.0, &mut commands, &mut meshes, &mut materials);
 }
@@ -46,7 +51,7 @@ fn add_wheel(offset: f32, commands: &mut Commands,
                 torque: 0.0,
             },
             MaterialMesh2dBundle {
-                mesh: meshes.add(shape::Circle::new(50.).into()).into(),
+                mesh: meshes.add(shape::Circle::new(WHEEL_RADIUS).into()).into(),
                 material: materials.add(ColorMaterial::from(Color::PURPLE)),
                 transform,
                 ..default()

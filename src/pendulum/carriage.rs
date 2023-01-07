@@ -1,7 +1,7 @@
 use bevy::prelude::*;
-use bevy_rapier2d::prelude::*;
 
 mod block;
+mod pendulum;
 pub mod wheel;
 
 #[derive(Component)]
@@ -12,6 +12,7 @@ pub fn setup(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
+    //---- Configuration constants. ----//
     const WHEEL_BASE: f32 = 100.0;
     const WHEEL_RADIUS: f32 = 10.0;
     const CARRIAGE_LENGTH: f32 = WHEEL_BASE + 10.0;
@@ -20,6 +21,7 @@ pub fn setup(
     const PENDULUM_HEIGHT: f32 = CARRIAGE_LENGTH;
     const Y_ZERO: f32 = 50.0;
 
+    //---- Create config structs from constants. ----//
     let left_wheel_config = wheel::Config {
         radius: WHEEL_RADIUS,
         initial_position: Transform::from_xyz(-WHEEL_BASE / 2.0, Y_ZERO, 1.0),
@@ -43,8 +45,12 @@ pub fn setup(
         height: PENDULUM_HEIGHT,
         initial_position: Transform::from_xyz(0.0, PENDULUM_OFFSET, 0.0),
     };
-    let mut carriage = add_carriage(carriage_config, &mut commands, &mut meshes, &mut materials);
-    add_pendulum(
+
+    //---- Construct the carriage. ----//
+    // Add the base of the carriage:
+    let mut carriage = block::add(carriage_config, &mut commands, &mut meshes, &mut materials);
+
+    pendulum::add(
         pendulum_config,
         &mut carriage,
         &mut commands,
@@ -65,52 +71,4 @@ pub fn setup(
         &mut meshes,
         &mut materials,
     );
-}
-
-fn add_carriage(
-    carriage_config: block::Config,
-    commands: &mut Commands,
-    meshes: &mut ResMut<Assets<Mesh>>,
-    materials: &mut ResMut<Assets<ColorMaterial>>,
-) -> Entity {
-    return block::add(carriage_config, commands, meshes, materials);
-}
-
-#[derive(Component)]
-struct Pendulum;
-
-fn add_pendulum(
-    pendulum_config: block::Config,
-    carriage: &mut Entity,
-    commands: &mut Commands,
-    meshes: &mut ResMut<Assets<Mesh>>,
-    materials: &mut ResMut<Assets<ColorMaterial>>,
-) {
-    // Add the little bit to join the pendulum and the carriage.
-    let joiner_height = pendulum_config.length * 3.0;
-    let pendulum_height = pendulum_config.height;
-    let joiner_config = block::Config {
-        height: joiner_height,
-        length: pendulum_config.length,
-        initial_position: Transform::from_xyz(
-            0.0,
-            pendulum_config.length + pendulum_config.initial_position.translation.y,
-            0.0,
-        ),
-    };
-    let joiner = block::add(joiner_config, commands, meshes, materials);
-
-    let pendulum = block::add(pendulum_config, commands, meshes, materials);
-
-    let joiner_pin = FixedJointBuilder::new().local_anchor1(Vec2::new(0.0, -joiner_height / 2.0));
-    commands.entity(*carriage).with_children(|cmd| {
-        cmd.spawn(ImpulseJoint::new(joiner, joiner_pin));
-    });
-
-    let pendulum_pivot = RevoluteJointBuilder::new()
-        .local_anchor1(Vec2::new(0.0, joiner_height / 2.0))
-        .local_anchor2(Vec2::new(0.0, -pendulum_height / 2.0));
-    commands.entity(pendulum).with_children(|cmd| {
-        cmd.spawn(ImpulseJoint::new(joiner, pendulum_pivot));
-    });
 }

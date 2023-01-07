@@ -1,8 +1,8 @@
-use bevy::{prelude::*, sprite::MaterialMesh2dBundle};
+use bevy::prelude::*;
 use bevy_rapier2d::prelude::*;
 
-use crate::pendulum::collision_group;
-use crate::pendulum::wheel;
+mod block;
+pub mod wheel;
 
 #[derive(Component)]
 struct Carriage;
@@ -31,14 +31,14 @@ pub fn setup(
         ..left_wheel_config
     };
 
-    let carriage_config = BlockConfig {
+    let carriage_config = block::Config {
         length: CARRIAGE_LENGTH,
         height: CARRIAGE_HEIGHT,
         initial_position: Transform::from_xyz(0.0, Y_ZERO, 0.0),
     };
 
     const PENDULUM_OFFSET: f32 = Y_ZERO + (PENDULUM_HEIGHT / 2.0) + (PENDULUM_LENGTH * 3.0);
-    let pendulum_config = BlockConfig {
+    let pendulum_config = block::Config {
         length: PENDULUM_LENGTH,
         height: PENDULUM_HEIGHT,
         initial_position: Transform::from_xyz(0.0, PENDULUM_OFFSET, 0.0),
@@ -67,26 +67,20 @@ pub fn setup(
     );
 }
 
-struct BlockConfig {
-    length: Real,
-    height: Real,
-    initial_position: Transform,
-}
-
 fn add_carriage(
-    carriage_config: BlockConfig,
+    carriage_config: block::Config,
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
     materials: &mut ResMut<Assets<ColorMaterial>>,
 ) -> Entity {
-    return add_block(carriage_config, commands, meshes, materials);
+    return block::add(carriage_config, commands, meshes, materials);
 }
 
 #[derive(Component)]
 struct Pendulum;
 
 fn add_pendulum(
-    pendulum_config: BlockConfig,
+    pendulum_config: block::Config,
     carriage: &mut Entity,
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
@@ -95,7 +89,7 @@ fn add_pendulum(
     // Add the little bit to join the pendulum and the carriage.
     let joiner_height = pendulum_config.length * 3.0;
     let pendulum_height = pendulum_config.height;
-    let joiner_config = BlockConfig {
+    let joiner_config = block::Config {
         height: joiner_height,
         length: pendulum_config.length,
         initial_position: Transform::from_xyz(
@@ -104,9 +98,9 @@ fn add_pendulum(
             0.0,
         ),
     };
-    let joiner = add_block(joiner_config, commands, meshes, materials);
+    let joiner = block::add(joiner_config, commands, meshes, materials);
 
-    let pendulum = add_block(pendulum_config, commands, meshes, materials);
+    let pendulum = block::add(pendulum_config, commands, meshes, materials);
 
     let joiner_pin = FixedJointBuilder::new().local_anchor1(Vec2::new(0.0, -joiner_height / 2.0));
     commands.entity(*carriage).with_children(|cmd| {
@@ -119,33 +113,4 @@ fn add_pendulum(
     commands.entity(pendulum).with_children(|cmd| {
         cmd.spawn(ImpulseJoint::new(joiner, pendulum_pivot));
     });
-}
-
-fn add_block(
-    block_config: BlockConfig,
-    commands: &mut Commands,
-    meshes: &mut ResMut<Assets<Mesh>>,
-    materials: &mut ResMut<Assets<ColorMaterial>>,
-) -> Entity {
-    let collision_group_filter = collision_group::GROUND;
-    return commands
-        .spawn((
-            RigidBody::Dynamic,
-            // Note factors of 2.0: Rapier uses half-length and height as the parameters.
-            Collider::cuboid(block_config.length / 2.0, block_config.height / 2.0),
-            ExternalForce {
-                force: Vec2::new(0.0, 0.0),
-                torque: 0.0,
-            },
-            MaterialMesh2dBundle {
-                mesh: meshes
-                    .add(shape::Box::new(block_config.length, block_config.height, 0.0).into())
-                    .into(),
-                material: materials.add(ColorMaterial::from(Color::PURPLE)),
-                transform: block_config.initial_position,
-                ..default()
-            },
-            CollisionGroups::new(collision_group::CARRIAGE, collision_group_filter),
-        ))
-        .id();
 }

@@ -6,7 +6,6 @@ mod carriage;
 mod collision_group;
 mod control;
 mod ground;
-mod wheel;
 
 impl Plugin for PendulumPlugin {
     fn build(&self, app: &mut App) {

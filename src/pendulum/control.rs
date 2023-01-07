@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use bevy_rapier2d::prelude::*;
 
-use crate::pendulum::wheel::Wheel;
+use crate::pendulum::carriage::wheel::Wheel;
 
 pub fn control_wheel(
     keyboard_input: Res<Input<KeyCode>>,

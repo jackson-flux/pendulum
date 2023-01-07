@@ -3,27 +3,27 @@ use bevy_rapier2d::prelude::*;
 
 pub struct PendulumPlugin;
 
-// Collision groups
-const GROUND: Group = Group::GROUP_1;
-const WHEEL: Group = Group::GROUP_2;
-const CARRIAGE: Group = Group::GROUP_3;
+mod collision_group;
+mod control;
+mod wheel;
 
 impl Plugin for PendulumPlugin {
     fn build(&self, app: &mut App) {
         app.add_startup_system(setup_ground)
             .add_startup_system(setup_pendulum)
-            .add_system(control_wheel);
+            .add_system(control::control_wheel);
     }
 }
 
 fn setup_ground(mut commands: Commands) {
     /* Create the ground. */
-    let collision_group_filter = GROUND | WHEEL | CARRIAGE;
+    let collision_group_filter =
+        collision_group::GROUND | collision_group::WHEEL | collision_group::CARRIAGE;
     commands.spawn((
         Collider::cuboid(500.0, 50.0),
         TransformBundle::from(Transform::from_xyz(0.0, -100.0, 0.0)),
         Friction::coefficient(100.0),
-        CollisionGroups::new(GROUND, collision_group_filter),
+        CollisionGroups::new(collision_group::GROUND, collision_group_filter),
     ));
 }
 
@@ -90,7 +90,7 @@ fn add_block(
     meshes: &mut ResMut<Assets<Mesh>>,
     materials: &mut ResMut<Assets<ColorMaterial>>,
 ) -> Entity {
-    let collision_group_filter = GROUND;
+    let collision_group_filter = collision_group::GROUND;
     return commands
         .spawn((
             RigidBody::Dynamic,
@@ -108,61 +108,9 @@ fn add_block(
                 transform: block_config.initial_position,
                 ..default()
             },
-            CollisionGroups::new(CARRIAGE, collision_group_filter),
+            CollisionGroups::new(collision_group::CARRIAGE, collision_group_filter),
         ))
         .id();
-}
-
-#[derive(Component)]
-struct Wheel;
-
-struct WheelConfig {
-    radius: Real,
-    initial_position: Transform,
-    restitution: Real,
-    friction: Real,
-}
-
-fn add_wheel(
-    wheel_config: WheelConfig,
-    carriage: &mut Entity,
-    commands: &mut Commands,
-    meshes: &mut ResMut<Assets<Mesh>>,
-    materials: &mut ResMut<Assets<ColorMaterial>>,
-) {
-    let collision_group_filter = GROUND;
-    let wheel = commands
-        .spawn((
-            RigidBody::Dynamic,
-            Collider::ball(wheel_config.radius),
-            Restitution::coefficient(wheel_config.restitution),
-            Friction::coefficient(wheel_config.friction),
-            ExternalForce {
-                force: Vec2::new(0.0, 0.0),
-                torque: 0.0,
-            },
-            Velocity {
-                linvel: Default::default(),
-                angvel: 0.0,
-            },
-            MaterialMesh2dBundle {
-                mesh: meshes
-                    .add(shape::Circle::new(wheel_config.radius).into())
-                    .into(),
-                material: materials.add(ColorMaterial::from(Color::BLUE)),
-                transform: wheel_config.initial_position,
-                ..default()
-            },
-            CollisionGroups::new(WHEEL, collision_group_filter.into()),
-            Wheel,
-        ))
-        .id();
-    let axis = RevoluteJointBuilder::new()
-        .local_anchor1(Vec2::new(wheel_config.initial_position.translation.x, 0.0));
-
-    commands.entity(wheel).with_children(|cmd| {
-        cmd.spawn(ImpulseJoint::new(*carriage, axis));
-    });
 }
 
 fn setup_pendulum(
@@ -178,13 +126,13 @@ fn setup_pendulum(
     const PENDULUM_HEIGHT: f32 = CARRIAGE_LENGTH;
     const Y_ZERO: f32 = 50.0;
 
-    let left_wheel_config = WheelConfig {
+    let left_wheel_config = wheel::Config {
         radius: WHEEL_RADIUS,
         initial_position: Transform::from_xyz(-WHEEL_BASE / 2.0, Y_ZERO, 1.0),
         restitution: 1.0,
         friction: 1.0,
     };
-    let right_wheel_config = WheelConfig {
+    let right_wheel_config = wheel::Config {
         initial_position: Transform::from_xyz(WHEEL_BASE / 2.0, Y_ZERO, 1.0),
         ..left_wheel_config
     };
@@ -209,56 +157,18 @@ fn setup_pendulum(
         &mut meshes,
         &mut materials,
     );
-    add_wheel(
+    wheel::add(
         left_wheel_config,
         &mut carriage,
         &mut commands,
         &mut meshes,
         &mut materials,
     );
-    add_wheel(
+    wheel::add(
         right_wheel_config,
         &mut carriage,
         &mut commands,
         &mut meshes,
         &mut materials,
     );
-}
-
-fn get_torque(angular_velocity: f32, keyboard_input: &Res<Input<KeyCode>>) -> f32 {
-    const MAX_TORQUE: f32 = 0.1;
-    const MAX_ANGULAR_VELOCITY: f32 = 10.0;
-
-    // Between -1.0 and 1.0.
-    const TRUNC_MIN: f32 = -1.0;
-    const TRUNC_MAX: f32 = 1.0;
-    let velocity_proportion = (angular_velocity / MAX_ANGULAR_VELOCITY)
-        .max(TRUNC_MIN)
-        .min(TRUNC_MAX);
-    let positive_residual_velocity = 1.0 - velocity_proportion.max(0.0);
-    let negative_residual_velocity = 1.0 + velocity_proportion.min(0.0);
-
-    let mut torque: f32 = 0.0;
-    if keyboard_input.pressed(KeyCode::Left) {
-        // On left keypress, we want the torque to be positive, so wheel spins anticlockwise.
-        torque = positive_residual_velocity * MAX_TORQUE;
-    }
-    if keyboard_input.pressed(KeyCode::Right) {
-        torque = -negative_residual_velocity * MAX_TORQUE;
-    }
-    if keyboard_input.pressed(KeyCode::Down) {
-        torque = -velocity_proportion * MAX_TORQUE;
-    }
-    return torque;
-}
-
-fn control_wheel(
-    keyboard_input: Res<Input<KeyCode>>,
-    velocities: Query<&Velocity, With<Wheel>>,
-    mut forces: Query<&mut ExternalForce, With<Wheel>>,
-) {
-    for (velocity, mut force) in velocities.iter().zip(forces.iter_mut()) {
-        let torque = get_torque(velocity.angvel, &keyboard_input);
-        force.torque = torque;
-    }
 }
